@@ -23,4 +23,8 @@ Process create_process(const block code[], size_t code_size);
 
 const block *get_current_block(const Process *p);
 
+void advance_block(Process *p);
+
+void advance_offset(Process *p, size_t off);
+
 #endif

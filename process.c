@@ -30,3 +30,26 @@ const block *get_current_block(const Process *p) {
 
   return NULL;
 }
+
+/*
+ * I think it's much easier and simpler to split advance_block() and
+ * advance_offset(), rather than having them in one single function, at least
+ * for now.
+ */
+void advance_block(Process *p) {
+  if (!p)
+    return;
+
+  p->ip.index++;
+  p->ip.offset = 0;
+}
+
+void advance_offset(Process *p, size_t off) {
+  /* TODO: Some code block types operations currently doesn't have cost, so
+   *       that's dangerous.
+   */
+  if (!p || off <= p->ip.offset || off > p->code->cost)
+    return;
+
+  p->ip.offset = off;
+}

@@ -64,7 +64,7 @@ void next_event() {
 
   for (;;) {
     const block *b = get_current_block(&current);
-    current.ip.index++;
+    advance_block(&current);
 
     if (b == NULL) {
       /* Process termination */
