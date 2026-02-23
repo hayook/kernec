@@ -1,7 +1,10 @@
 
+SRC = kernec.c process.c queue.c
 
-kernec: kernec.c
-	gcc $< -o $@
+all: kernec
+
+kernec: ${SRC} kernec.h process.h queue.h
+	gcc ${SRC} -o $@
 
 run: kernec
 	./kernec
