@@ -23,7 +23,7 @@ size_t running_process = 0;
 int load_program(const char *name, const block code[], int code_size) {
   /* Loads a program into the system
    * Note: In reality, this should be in exec handler, also we don't actually
-   * create a new process, we replace the current porcess, we just modify the
+   * create a new process, we replace the current process, we just modify the
    * memory and some structure attributes, but since we don't have an init
    * system, or fork, or anything like that, and given the fact that programs
    * are loaded at the beginning anyways, we can't implement such things for
