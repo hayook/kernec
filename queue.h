@@ -1,23 +1,13 @@
 #ifndef QUEUE_H
 #define QUEUE_H
 
-#include "process.h"
+#include <stdlib.h>
 
-/* Queue (Fixed array) for processes.
- * TODO: Create a generic dynamic array regardless of items type.
- */
+typedef struct _Queue Queue;
 
-#define QUEUE_SZ 64
-typedef struct {
-  Process items[QUEUE_SZ];
-  int head;
-  int tail;
-  int length;
-} queue;
-
-int queue_append(queue *q, Process p);
-
-int queue_pop(queue *q, Process *p);
-
+Queue *queue_new(size_t element_size);
+void queue_free(Queue *q);
+int queue_append(Queue *q, void *buf);
+int queue_pop(Queue *q, void *buf);
 
 #endif

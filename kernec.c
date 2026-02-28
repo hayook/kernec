@@ -8,7 +8,7 @@
 const block p1_code[] = {{.op = OP_CPU, .cost = 0.27},
                          {.op = OP_CPU, .cost = 0.27}};
 
-queue ready_queue = {0};
+Queue *ready_queue;
 
 double clock = 0;
 
@@ -43,7 +43,7 @@ int load_program(const char *name, const block code[], int code_size) {
    * i really need it, also i don't know whether Linux has a list for all
    * processes, or they are spread across different queues.
    */
-  int ret = queue_append(&ready_queue, p);
+  int ret = queue_append(ready_queue, &p);
   if (ret != 0)
     return -1;
 
@@ -78,6 +78,8 @@ void next_event() {
 int main(void) {
   int ret;
 
+  ready_queue = queue_new(sizeof(Process));
+
   /* Kernel init
    * Note: To be more realistic, kernel init should also consume simulation time
    * but we'll see, for simplicity, currently kernel code time is negligible
@@ -91,6 +93,7 @@ int main(void) {
                      sizeof(p1_code) / sizeof(p1_code[0]));
   if (ret != 0) {
     printf("Can't load program\n");
+    queue_free(ready_queue);
     return 1;
   }
 
@@ -98,10 +101,11 @@ int main(void) {
                      sizeof(p1_code) / sizeof(p1_code[0]));
   if (ret != 0) {
     printf("Can't load program\n");
+    queue_free(ready_queue);
     return 1;
   }
 
-  ret = queue_pop(&ready_queue, &current);
+  ret = queue_pop(ready_queue, &current);
   if (ret == 0) {
     running_process = 1;
     start_process(current);
@@ -144,12 +148,13 @@ int main(void) {
      */
     printf("[ OS ]  process %lu exited at %f.\n", current.pid, clock);
     running_process = 0;
-    ret = queue_pop(&ready_queue, &current);
+    ret = queue_pop(ready_queue, &current);
     if (ret == 0) {
       running_process = 1;
       start_process(current);
     }
   }
 
+  queue_free(ready_queue);
   return 0;
 }
