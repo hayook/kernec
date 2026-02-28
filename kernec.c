@@ -43,8 +43,8 @@ int load_program(const char *name, const block code[], int code_size) {
    * i really need it, also i don't know whether Linux has a list for all
    * processes, or they are spread across different queues.
    */
-  int ret = queue_append(ready_queue, &p);
-  if (ret != 0)
+  int err = queue_append(ready_queue, &p);
+  if (err)
     return -1;
 
   printf("[ OS ] Loading program '%s'...\n", name);
@@ -76,7 +76,8 @@ void next_event() {
 }
 
 int main(void) {
-  int ret;
+	int ret = 1;
+  int err;
 
   ready_queue = queue_new(sizeof(Process));
 
@@ -89,24 +90,23 @@ int main(void) {
    * Note: In a real scenario, this would happen at different times. for now, we
    * load them all at the beginning.
    */
-  ret = load_program("Web Browser", p1_code,
+  err = load_program("Web Browser", p1_code,
                      sizeof(p1_code) / sizeof(p1_code[0]));
-  if (ret != 0) {
+  if (err) {
     printf("Can't load program\n");
-    queue_free(ready_queue);
+	goto out_free;
+  }
+
+  err = load_program("Web Browser", p1_code,
+                     sizeof(p1_code) / sizeof(p1_code[0]));
+  if (err) {
+    printf("Can't load program\n");
+	goto out_free;
     return 1;
   }
 
-  ret = load_program("Web Browser", p1_code,
-                     sizeof(p1_code) / sizeof(p1_code[0]));
-  if (ret != 0) {
-    printf("Can't load program\n");
-    queue_free(ready_queue);
-    return 1;
-  }
-
-  ret = queue_pop(ready_queue, &current);
-  if (ret == 0) {
+  err = queue_pop(ready_queue, &current);
+  if (!err) {
     running_process = 1;
     start_process(current);
   }
@@ -148,13 +148,15 @@ int main(void) {
      */
     printf("[ OS ]  process %lu exited at %f.\n", current.pid, clock);
     running_process = 0;
-    ret = queue_pop(ready_queue, &current);
-    if (ret == 0) {
+    err = queue_pop(ready_queue, &current);
+    if (!err) {
       running_process = 1;
       start_process(current);
     }
   }
 
+  ret = 0;
+out_free:
   queue_free(ready_queue);
-  return 0;
+  return ret;
 }
