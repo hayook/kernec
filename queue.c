@@ -87,3 +87,9 @@ int queue_pop(Queue *q, void *buf) {
   q->length--;
   return 0;
 }
+
+size_t queue_length(Queue *q) {
+	queue_validate(q);
+
+	return q->length;
+}
