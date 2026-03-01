@@ -4,7 +4,7 @@
 #include <stdlib.h>
 
 enum BlockOperations {
-	OP_CPU,
+  OP_CPU,
 };
 
 typedef struct {

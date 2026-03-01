@@ -76,7 +76,7 @@ void next_event() {
 }
 
 int main(void) {
-	int ret = 1;
+  int ret = 1;
   int err;
 
   ready_queue = queue_new(sizeof(Process));
@@ -94,14 +94,14 @@ int main(void) {
                      sizeof(p1_code) / sizeof(p1_code[0]));
   if (err) {
     printf("Can't load program\n");
-	goto out_free;
+    goto out_free;
   }
 
   err = load_program("Web Browser", p1_code,
                      sizeof(p1_code) / sizeof(p1_code[0]));
   if (err) {
     printf("Can't load program\n");
-	goto out_free;
+    goto out_free;
     return 1;
   }
 
