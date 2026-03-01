@@ -13,4 +13,13 @@ typedef struct {
   size_t dur;
 } block;
 
+enum InterruptEvents {
+  INT_EXIT,
+};
+
+typedef struct {
+  enum InterruptEvents type;
+  double at;
+} Event;
+
 #endif

@@ -9,6 +9,7 @@ const block p1_code[] = {{.op = OP_CPU, .cost = 0.27},
                          {.op = OP_CPU, .cost = 0.27}};
 
 Queue *ready_queue;
+Queue *interrupts_queue;
 
 double clock = 0;
 
@@ -58,6 +59,9 @@ void start_process(Process p) {
 }
 
 void next_event() {
+  int err;
+  Event ev = {0};
+
   if (!running_process)
     assert(!"Unreachable: OS should be terminated at this point since we don't "
             "have IO");
@@ -68,6 +72,13 @@ void next_event() {
 
     if (b == NULL) {
       /* Process termination */
+      ev.type = INT_EXIT;
+      ev.at = clock;
+      err = queue_append(interrupts_queue, &ev);
+      /* TODO: I thought next_event won't failt, it should return error code, or
+       * should it?
+       */
+      assert(!err && "next_event cannot append event");
       break;
     } else if (b->op == OP_CPU) {
       clock += b->cost;
@@ -80,6 +91,12 @@ int main(void) {
   int err;
 
   ready_queue = queue_new(sizeof(Process));
+
+  interrupts_queue = queue_new(sizeof(Event));
+  if (!interrupts_queue) {
+    printf("ERROR: failed to create the events queueu\n");
+    goto out_free;
+  }
 
   /* Kernel init
    * Note: To be more realistic, kernel init should also consume simulation time
@@ -133,30 +150,34 @@ int main(void) {
     next_event();
     printf("\n--- CPU: Switched to kernel mode ---\n");
 
-    /* Handle exit syscall
-     * Currently, the only way kernel will gain access back to the CPU is when
-     * the process make an exit syscall, now, the exit syscall it's inevitable
-     * when the process reaches the end of the code, if next_event() doesn't
-     * return at that point, a segmentation fault will be generated (assuming
-     * that next_event() will break only in that case), i have a better plan for
-     * the interrupt model by using an interrupt events queue, but for now, this
-     * is a simple way to do it.
-     * Long story short: next_event() should return when the end of code is
-     * reached, if it didn't the process will seg fault, when it returns the
-     * kernel will handle the termination since it's the only possible interrupt
-     * for now.
-     */
-    printf("[ OS ]  process %lu exited at %f.\n", current.pid, clock);
-    running_process = 0;
-    err = queue_pop(ready_queue, &current);
-    if (!err) {
-      running_process = 1;
-      start_process(current);
+    while (queue_length(interrupts_queue) > 0) {
+      Event ev;
+      err = queue_pop(interrupts_queue, &ev);
+      if (err)
+        goto out_free;
+
+      switch (ev.type) {
+      case INT_EXIT:
+        printf("[ OS ]  process %lu exited at %f.\n", current.pid, ev.at);
+        running_process = 0;
+        err = queue_pop(ready_queue, &current);
+        /* this error doesn't mean the queue is empty, and if it's not empty and
+         * there is an error, i don't know what is the right thing to do in this
+         * case, maybe check for whether the queue is empty using the
+         * queue_length() or special error codes when introduced, not sure,
+         * we'll see.*/
+        if (!err) {
+          running_process = 1;
+          start_process(current);
+        }
+        break;
+      }
     }
   }
 
   ret = 0;
 out_free:
   queue_free(ready_queue);
+  queue_free(interrupts_queue);
   return ret;
 }
