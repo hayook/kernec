@@ -177,6 +177,11 @@ int main(void) {
 
   ret = 0;
 out_free:
+  /* TODO: Improve the cleanup model
+   * If the function jumps here to free a pointer, before it allocates its
+   * memory, something bad will happen, i cannot free all pointers at once, or
+   * find a better way..
+   */
   queue_free(ready_queue);
   queue_free(interrupts_queue);
   return ret;
