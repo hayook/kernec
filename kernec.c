@@ -24,6 +24,26 @@ typedef struct {
   size_t pptr;
 } klua_Process;
 
+Vector *procs_vec;
+
+/* Note: I need a reliable indicator to tell whether there is a current
+ * process or no, either `current` be a pointer, another variable, for now i'll
+ * go with another variable, i don't know whether there are better options.
+ * (Maybe current.state? but `current` will eventually be a global pointer)
+ *
+ * TODO: If the process terminates and the user tries to reset it as the current
+ * the process will segfault, so running_process = 0; here is not enough to
+ * prevent the user, i don't know whther i want to prevent the user from doing
+ * such thing or no, since they're responsible for the kernel logic. But
+ * anyways, if i want to prevent it, the process should be removed from the
+ * system, either by removing it from procs_vec (The vector will shift the
+ * elements, so the pptrs will be corrupted) or add a process state and prevent
+ * setting "terminated" processes as current in setCurrent, we'll see. And of
+ * course i'll do my best to avoid reversing a linked list.
+ */
+Process current = {0};
+size_t running_process = 0;
+
 /* Lua onEvent function C implementation */
 int klua_onEvent(lua_State *klua_state) {
   /* Lua onEvent arg1: event type (string) */
@@ -56,7 +76,15 @@ int klua_onEvent(lua_State *klua_state) {
   return 0;
 }
 
-Vector *procs_vec;
+/* Lua setCurrent function C implementation */
+int klua_setCurrent(lua_State *klua_state) {
+  klua_Process *proc_ud = luaL_checkudata(klua_state, 1, "Kernec.Process");
+  Process p;
+  vector_read(procs_vec, proc_ud->pptr, &p);
+  running_process = 1;
+  current = p;
+  return 0;
+}
 
 int klua_Process_index(lua_State *klua_state) {
   klua_Process *proc_ud = luaL_checkudata(klua_state, 1, "Kernec.Process");
@@ -110,18 +138,9 @@ int klua_pushprocess(lua_State *klua_state, int pptr) {
 const block p1_code[] = {{.op = OP_CPU, .cost = 0.27},
                          {.op = OP_CPU, .cost = 0.27}};
 
-Queue *ready_queue;
 Queue *interrupts_queue;
 
 double clock = 0;
-
-/* Note: I need a reliable indicator to tell whether there is a current
- * process or no, either `current` be a pointer, another variable, for now i'll
- * go with another variable, i don't know whether there are better options.
- * (Maybe current.state? but `current` will eventually be a global pointer)
- */
-Process current = {0};
-size_t running_process = 0;
 
 int load_program(lua_State *klua_state, const char *name, const block code[],
                  int code_size) {
@@ -145,13 +164,8 @@ int load_program(lua_State *klua_state, const char *name, const block code[],
   if (vector_append(procs_vec, &p))
     return -1;
 
-  int err = queue_append(ready_queue, &p);
-  if (err)
-    return -1;
-
   printf("[ OS ] Loading program '%s'...\n", name);
   printf("[ OS ] Process %lu created.\n", p.pid);
-  printf("[ Scheduler ] Process %lu added to the ready queue\n", p.pid);
 
   /* Note: There is a difference between these three events:
    * "onExec": exec syscall, you will load the program and create the process.
@@ -204,7 +218,6 @@ int main(void) {
   int err;
 
   procs_vec = vector_new(sizeof(Process));
-  ready_queue = queue_new(sizeof(Process));
 
   interrupts_queue = queue_new(sizeof(Event));
   if (!interrupts_queue) {
@@ -216,6 +229,7 @@ int main(void) {
   lua_State *klua_state = luaL_newstate();
   luaL_openlibs(klua_state);
   lua_register(klua_state, "onEvent", klua_onEvent);
+  lua_register(klua_state, "setCurrent", klua_setCurrent);
   /* TODO: Catch and handle Lua errors and panics */
   luaL_dofile(klua_state, KLUA_SCRIPT);
 
@@ -253,11 +267,6 @@ int main(void) {
     lua_rawgeti(klua_state, LUA_REGISTRYINDEX, init_cb);
     lua_callk(klua_state, 0, 0, 0, NULL);
   }
-  err = queue_pop(ready_queue, &current);
-  if (!err) {
-    running_process = 1;
-    start_process(current);
-  }
 
   /* After running the init process (which is not really init in this case, just
    * a process at first) the kernel will stay idle in memory waiting for
@@ -289,6 +298,14 @@ int main(void) {
 
       switch (ev.type) {
       case INT_EXIT:
+        printf("[ OS ]  process %lu exited at %f.\n", current.pid, ev.at);
+        /* Note: I think let the runtime sets running_process to false at exit
+         * is a good idea, how convenient is it? I think the runtime doesn't
+         * care, when a process terminates, current sets it to false as if it's
+         * the startup state, i'll keep it in the runtime, if the user scripts
+         * need the control it to implement a specific logic we'll see.
+         */
+        running_process = 0;
         if (exit_cb != -1) {
           /* Note: I think i need some generic way to pass an event table to
            * callbacks regardless of the event type, then each callback can
@@ -297,18 +314,6 @@ int main(void) {
            */
           lua_rawgeti(klua_state, LUA_REGISTRYINDEX, exit_cb);
           lua_callk(klua_state, 0, 0, 0, NULL);
-        }
-        printf("[ OS ]  process %lu exited at %f.\n", current.pid, ev.at);
-        running_process = 0;
-        err = queue_pop(ready_queue, &current);
-        /* this error doesn't mean the queue is empty, and if it's not empty and
-         * there is an error, i don't know what is the right thing to do in this
-         * case, maybe check for whether the queue is empty using the
-         * queue_length() or special error codes when introduced, not sure,
-         * we'll see.*/
-        if (!err) {
-          running_process = 1;
-          start_process(current);
         }
         break;
       }
@@ -323,7 +328,6 @@ out_free:
    * find a better way..
    */
   vector_free(procs_vec);
-  queue_free(ready_queue);
   queue_free(interrupts_queue);
   return ret;
 }
