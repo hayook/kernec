@@ -1,5 +1,5 @@
 
 
-kernec.o
 kernec
-a.out
+*.o
+*.out
