@@ -1,4 +1,5 @@
 #include "kernec.h"
+#include "klua.h"
 #include "process.h"
 #include "queue.h"
 #include "vector.h"
@@ -8,7 +9,6 @@
 #include <lua5.3/lualib.h>
 #include <stdio.h>
 #include <string.h>
-#include "klua.h"
 
 #define KLUA_SCRIPT "./init.lua"
 
@@ -41,16 +41,11 @@ Vector *procs_vec;
 Process current = {0};
 size_t running_process = 0;
 
-/* TODO: Unhard-code programs code */
-const block p1_code[] = {{.op = OP_CPU, .cost = 0.27},
-                         {.op = OP_CPU, .cost = 0.27}};
-
 Queue *interrupts_queue;
 
 double clock = 0;
 
-int load_program(lua_State *klua_state, const char *name, const block code[],
-                 int code_size) {
+int load_program(lua_State *klua_state) {
   /* Loads a program into the system
    * Note: In reality, this should be in exec handler, also we don't actually
    * create a new process, we replace the current process, we just modify the
@@ -63,15 +58,20 @@ int load_program(lua_State *klua_state, const char *name, const block code[],
    * any other mechanism works well.
    */
 
+  Program pgm;
+  if (klua_parseprogram(klua_state, &pgm) != 0) {
+    return 1;
+  }
+
   /* Create a container for the program, that will hold the address
    * where the program is stored, in memory
    */
-  Process p = create_process(code, code_size);
+  Process p = create_process(pgm.code, pgm.code_size);
 
   if (vector_append(procs_vec, &p))
     return -1;
 
-  printf("[ OS ] Loading program '%s'...\n", name);
+  printf("[ OS ] Loading program '%s'...\n", pgm.name);
   printf("[ OS ] Process %lu created.\n", p.pid);
 
   /* Note: There is a difference between these three events:
@@ -149,20 +149,20 @@ int main(void) {
    * Note: In a real scenario, this would happen at different times. for now, we
    * load them all at the beginning.
    */
-  err = load_program(klua_state, "Web Browser", p1_code,
-                     sizeof(p1_code) / sizeof(p1_code[0]));
-  if (err) {
-    printf("Can't load program\n");
-    goto out_free;
+  lua_getglobal(klua_state, "job");
+  if (lua_istable(klua_state, -1)) {
+    size_t job_len = lua_rawlen(klua_state, -1);
+    for (int i = 1; i <= job_len; i++) {
+      lua_geti(klua_state, -1, i);
+      err = load_program(klua_state);
+      if (err) {
+        printf("Can't load program\n");
+        goto out_free;
+      }
+      lua_pop(klua_state, 1);
+    }
   }
-
-  err = load_program(klua_state, "Web Browser", p1_code,
-                     sizeof(p1_code) / sizeof(p1_code[0]));
-  if (err) {
-    printf("Can't load program\n");
-    goto out_free;
-    return 1;
-  }
+  lua_pop(klua_state, 1);
 
   /* Note: How the user will perform this initial scheduling?
    * I wouldn't need an "initial" scheduling if i had "onExec" event, but i

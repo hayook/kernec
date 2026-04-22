@@ -3,6 +3,8 @@
 
 #include <stdlib.h>
 
+#define NAME_BUF 256
+
 enum BlockOperations {
   OP_CPU,
 };
@@ -12,6 +14,12 @@ typedef struct {
   double cost;
   size_t dur;
 } block;
+
+typedef struct {
+	char name[NAME_BUF];
+	block *code;
+	size_t code_size;
+} Program;
 
 enum InterruptEvents {
   INT_EXIT,

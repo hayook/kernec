@@ -1,7 +1,9 @@
-#include <lua5.3/lua.h>
-#include <lua5.3/lauxlib.h>
+#include "kernec.h"
 #include "process.h"
 #include "vector.h"
+#include <lua5.3/lauxlib.h>
+#include <lua5.3/lua.h>
+#include <stdlib.h>
 #include <string.h>
 
 extern Vector *procs_vec;
@@ -57,6 +59,68 @@ int klua_setCurrent(lua_State *klua_state) {
   return 0;
 }
 
+int klua_parseprogram(lua_State *klua_state, Program *pgm) {
+  if (!lua_istable(klua_state, -1))
+    return -1;
+
+  /* Get program name */
+  lua_getfield(klua_state, -1, "name");
+  size_t name_len;
+  const char *name = luaL_checklstring(klua_state, -1, &name_len);
+
+  /* I am too lazy to allocate and manage memory for program names */
+  if (name_len > NAME_BUF) {
+    printf("ERROR: Program name is too long.\n");
+    lua_pop(klua_state, 2);
+    return -1;
+  }
+
+  strcpy(pgm->name, name);
+  lua_pop(klua_state, 1);
+
+  /* Parse program code */
+  lua_getfield(klua_state, -1, "code");
+  size_t nb_blocks = lua_rawlen(klua_state, -1);
+  pgm->code_size = nb_blocks;
+
+  /* Note: I think i can ignore freeing this allocation, at least for now
+   * as long as block arrays are fixed size and allocated only once, it
+   * basically behaves like a static memory. Also note that they are shared with
+   * Process.
+   */
+  pgm->code = (block *)malloc(nb_blocks * sizeof(block));
+  for (int i = 0; i < nb_blocks; i++) {
+    lua_geti(klua_state, -1, i + 1);
+
+    /* Get op kind */
+    lua_getfield(klua_state, -1, "op");
+    const char *op = luaL_checklstring(klua_state, -1, NULL);
+    if (strcmp(op, "CPU") == 0) {
+      pgm->code[i].op = OP_CPU;
+    } else {
+      printf("ERROR: Parsing %s: Unknown block op '%s'\n", pgm->name, op);
+      /* TODO: It's not convenient to count how many elements to pop each time i
+       * early return when something wrong happens in the parsing.
+       */
+      lua_pop(klua_state, 3);
+      return 0;
+    }
+
+    lua_pop(klua_state, 1);
+
+    /* Get op cost */
+    lua_getfield(klua_state, -1, "cost");
+    double cost = luaL_checknumber(klua_state, -1);
+    pgm->code[i].cost = cost;
+    lua_pop(klua_state, 1);
+
+    lua_pop(klua_state, 1);
+  }
+  lua_pop(klua_state, 1);
+
+  return 0;
+}
+
 int klua_Process_index(lua_State *klua_state) {
   klua_Process *proc_ud = luaL_checkudata(klua_state, 1, "Kernec.Process");
   Process p;
@@ -104,4 +168,3 @@ int klua_pushprocess(lua_State *klua_state, int pptr) {
 
   return 1;
 }
-
