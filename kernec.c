@@ -23,23 +23,7 @@ int init_cb = -1;
 
 Vector *procs_vec;
 
-/* Note: I need a reliable indicator to tell whether there is a current
- * process or no, either `current` be a pointer, another variable, for now i'll
- * go with another variable, i don't know whether there are better options.
- * (Maybe current.state? but `current` will eventually be a global pointer)
- *
- * TODO: If the process terminates and the user tries to reset it as the current
- * the process will segfault, so running_process = 0; here is not enough to
- * prevent the user, i don't know whther i want to prevent the user from doing
- * such thing or no, since they're responsible for the kernel logic. But
- * anyways, if i want to prevent it, the process should be removed from the
- * system, either by removing it from procs_vec (The vector will shift the
- * elements, so the pptrs will be corrupted) or add a process state and prevent
- * setting "terminated" processes as current in setCurrent, we'll see. And of
- * course i'll do my best to avoid reversing a linked list.
- */
-Process current = {0};
-size_t running_process = 0;
+int current = -1;
 
 Queue *interrupts_queue;
 
@@ -93,16 +77,18 @@ void start_process(Process p) {
 }
 
 void next_event() {
+  Process proc;
   int err;
   Event ev = {0};
 
-  if (!running_process)
+  if (current == -1)
     assert(!"Unreachable: OS should be terminated at this point since we don't "
             "have IO");
 
+  vector_read(procs_vec, current, &proc);
   for (;;) {
-    const block *b = get_current_block(&current);
-    advance_block(&current);
+    const block *b = get_current_block(&proc);
+    advance_block(&proc);
 
     if (b == NULL) {
       /* Process termination */
@@ -118,11 +104,13 @@ void next_event() {
       clock += b->cost;
     }
   }
+  vector_write(procs_vec, current, &proc);
 }
 
 int main(void) {
   int ret = 1;
   int err;
+  Process proc;
 
   procs_vec = vector_new(sizeof(Process));
 
@@ -188,7 +176,7 @@ int main(void) {
      */
 
     /* Termination conditions */
-    if (!running_process) {
+    if (current == -1) {
       printf("[ OS ]  Terminated\n");
       break;
     }
@@ -205,14 +193,26 @@ int main(void) {
 
       switch (ev.type) {
       case INT_EXIT:
-        printf("[ OS ]  process %lu exited at %f.\n", current.pid, ev.at);
-        /* Note: I think let the runtime sets running_process to false at exit
+        vector_read(procs_vec, current, &proc);
+        printf("[ OS ]  process %lu exited at %f.\n", proc.pid, ev.at);
+        /* Note: I think let the runtime sets current to false at exit
          * is a good idea, how convenient is it? I think the runtime doesn't
          * care, when a process terminates, current sets it to false as if it's
          * the startup state, i'll keep it in the runtime, if the user scripts
          * need the control it to implement a specific logic we'll see.
+         *
+         * If the process terminates and the user tries to reset it as the
+         * current the process will segfault, so `current = -1` here is
+         * not enough to prevent the user, i don't know whther i want to prevent
+         * the user from doing such thing or no, since they're responsible for
+         * the kernel logic. But anyways, if i want to prevent thakt, the
+         * process should be removed from the system, either by removing it from
+         * procs_vec (The vector will shift the elements, so the pptrs will be
+         * corrupted) or add a process state and prevent setting "terminated"
+         * processes as current in setCurrent, we'll see. And of course i'll do
+         * my best to avoid reversing a linked list.
          */
-        running_process = 0;
+        current = -1;
         if (exit_cb != -1) {
           /* Note: I think i need some generic way to pass an event table to
            * callbacks regardless of the event type, then each callback can

@@ -7,8 +7,7 @@
 #include <string.h>
 
 extern Vector *procs_vec;
-extern size_t running_process;
-extern Process current;
+extern int current;
 extern int exit_cb;
 extern int create_cb;
 extern int init_cb;
@@ -52,10 +51,7 @@ int klua_onEvent(lua_State *klua_state) {
 /* Lua setCurrent function C implementation */
 int klua_setCurrent(lua_State *klua_state) {
   klua_Process *proc_ud = luaL_checkudata(klua_state, 1, "Kernec.Process");
-  Process p;
-  vector_read(procs_vec, proc_ud->pptr, &p);
-  running_process = 1;
-  current = p;
+  current = proc_ud->pptr;
   return 0;
 }
 
