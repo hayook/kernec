@@ -164,8 +164,7 @@ int klua_Process_index(lua_State *klua_state) {
 
 int klua_Process_newindex(lua_State *klua_state) {
   klua_Process *proc_ud = luaL_checkudata(klua_state, 1, "Kernec.Process");
-  size_t len;
-  const char *key = luaL_checklstring(klua_state, 2, &len);
+  const char *key = luaL_checklstring(klua_state, 2, NULL);
   lua_getuservalue(klua_state, 1);
   lua_pushvalue(klua_state, 3);
   lua_setfield(klua_state, 4, key);
