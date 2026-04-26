@@ -151,17 +151,15 @@ int klua_Process_index(lua_State *klua_state) {
   klua_Process *proc_ud = luaL_checkudata(klua_state, 1, "Kernec.Process");
   Process p;
   vector_read(procs_vec, proc_ud->pptr, &p);
-  size_t len;
-  const char *key = luaL_checklstring(klua_state, 2, &len);
+  const char *key = luaL_checklstring(klua_state, 2, NULL);
   if (strcmp(key, "pid") == 0) {
     lua_pushinteger(klua_state, p.pid);
-    return 1;
   } else {
     lua_getuservalue(klua_state, 1);
     lua_getfield(klua_state, -1, key);
-    return 1;
   }
-  return 0;
+
+  return 1;
 }
 
 int klua_Process_newindex(lua_State *klua_state) {
