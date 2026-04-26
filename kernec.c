@@ -66,7 +66,11 @@ int load_program(lua_State *klua_state) {
   if (create_cb != -1) {
     lua_rawgeti(klua_state, LUA_REGISTRYINDEX, create_cb);
     klua_pushprocess(klua_state, vector_length(procs_vec) - 1);
-    lua_callk(klua_state, 1, 0, 0, NULL);
+    if (lua_pcall(klua_state, 1, 0, 0) != LUA_OK) {
+      printf("ERROR: Calling 'create' event callback.\n");
+      const char *error = lua_tostring(klua_state, -1);
+      printf("Lua error: %s\n", error);
+    }
   }
 
   return 0;
@@ -125,8 +129,16 @@ int main(void) {
   luaL_openlibs(klua_state);
   lua_register(klua_state, "onEvent", klua_onEvent);
   lua_register(klua_state, "setCurrent", klua_setCurrent);
-  /* TODO: Catch and handle Lua errors and panics */
-  luaL_dofile(klua_state, KLUA_SCRIPT);
+  if (luaL_dofile(klua_state, KLUA_SCRIPT) != LUA_OK) {
+    /* If the script failed for any reason, i think quiting is simpler and safer
+     * and avoids any undefined behavior, until i implement an error handling
+     * model robust enough.
+     */
+    printf("ERROR: Processing %s\n", KLUA_SCRIPT);
+    const char *error = lua_tostring(klua_state, -1);
+    printf("Lua error: %s\n", error);
+    goto out_free;
+  }
 
   /* Kernel init
    * Note: To be more realistic, kernel init should also consume simulation time
@@ -144,7 +156,7 @@ int main(void) {
       lua_geti(klua_state, -1, i);
       err = load_program(klua_state);
       if (err) {
-        printf("Can't load program\n");
+        printf("ERROR: Can't load program\n");
         goto out_free;
       }
       lua_pop(klua_state, 1);
@@ -160,7 +172,12 @@ int main(void) {
    */
   if (init_cb != -1) {
     lua_rawgeti(klua_state, LUA_REGISTRYINDEX, init_cb);
-    lua_callk(klua_state, 0, 0, 0, NULL);
+    if (lua_pcall(klua_state, 0, 0, 0) != LUA_OK) {
+      printf("ERROR: Calling 'init' event callback.\n");
+      const char *error = lua_tostring(klua_state, -1);
+      printf("Lua error: %s\n", error);
+      goto out_free;
+    }
   }
 
   /* After running the init process (which is not really init in this case, just
@@ -220,7 +237,11 @@ int main(void) {
            * the clock. We'll see.
            */
           lua_rawgeti(klua_state, LUA_REGISTRYINDEX, exit_cb);
-          lua_callk(klua_state, 0, 0, 0, NULL);
+          if (lua_pcall(klua_state, 0, 0, 0) != LUA_OK) {
+            printf("ERROR: Calling 'exit' event callback.\n");
+            const char *error = lua_tostring(klua_state, -1);
+            printf("Lua error: %s\n", error);
+          }
         }
         break;
       }

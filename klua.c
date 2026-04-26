@@ -19,17 +19,10 @@ typedef struct {
 /* Lua onEvent function C implementation */
 int klua_onEvent(lua_State *klua_state) {
   /* Lua onEvent arg1: event type (string) */
-  if (!lua_isstring(klua_state, 1))
-    return -1;
-
-  size_t ev_type_len;
-  const char *ev_type = lua_tolstring(klua_state, 1, &ev_type_len);
+  const char *ev_type = luaL_checklstring(klua_state, 1, NULL);
 
   /* Lua onEvent arg2: callback (function) */
-  if (!lua_isfunction(klua_state, 2))
-    return -1;
-
-  /* TODO: Handle Lua errors, cuz the above checks are pretty much weak */
+  luaL_checktype(klua_state, 2, LUA_TFUNCTION);
 
   int cb = luaL_ref(klua_state, LUA_REGISTRYINDEX);
 
@@ -42,7 +35,14 @@ int klua_onEvent(lua_State *klua_state) {
   } else if (strcmp(ev_type, "init") == 0) {
     init_cb = cb;
   } else {
-    return -1;
+    /* To avoid a switch case for checking that the event is valid, then another
+     * same one to store the cb, i have to create the reference before i check
+     * whether the event is valid or no, so i need to unref it when the event is
+     * invalid to avoid reference leaks. This may change when i refactor
+     * callbacks management.
+     */
+    luaL_unref(klua_state, LUA_REGISTRYINDEX, cb);
+    luaL_error(klua_state, "Unknown event \"%s\"", ev_type);
   }
 
   return 0;
@@ -56,18 +56,24 @@ int klua_setCurrent(lua_State *klua_state) {
 }
 
 int klua_parseprogram(lua_State *klua_state, Program *pgm) {
+  /* Stack: [ program_table ] */
   if (!lua_istable(klua_state, -1))
     return -1;
 
   /* Get program name */
   lua_getfield(klua_state, -1, "name");
+  /* Stack: [ name program_table ] */
+  if (!lua_isstring(klua_state, -1)) {
+    lua_pop(klua_state, 1);
+    return -1;
+  }
   size_t name_len;
   const char *name = luaL_checklstring(klua_state, -1, &name_len);
 
   /* I am too lazy to allocate and manage memory for program names */
   if (name_len > NAME_BUF) {
     printf("ERROR: Program name is too long.\n");
-    lua_pop(klua_state, 2);
+    lua_pop(klua_state, 1);
     return -1;
   }
 
@@ -76,6 +82,11 @@ int klua_parseprogram(lua_State *klua_state, Program *pgm) {
 
   /* Parse program code */
   lua_getfield(klua_state, -1, "code");
+  /* Stack: [ code_array program_table ] */
+  if (!lua_istable(klua_state, -1)) {
+    lua_pop(klua_state, 1);
+    return -1;
+  }
   size_t nb_blocks = lua_rawlen(klua_state, -1);
   pgm->code_size = nb_blocks;
 
@@ -87,9 +98,19 @@ int klua_parseprogram(lua_State *klua_state, Program *pgm) {
   pgm->code = (block *)malloc(nb_blocks * sizeof(block));
   for (int i = 0; i < nb_blocks; i++) {
     lua_geti(klua_state, -1, i + 1);
+    /* Stack: [ block_i_table code_array program_table ] */
+    if (!lua_istable(klua_state, -1)) {
+      lua_pop(klua_state, 2);
+      return -1;
+    }
 
     /* Get op kind */
     lua_getfield(klua_state, -1, "op");
+    /* Stack: [ op block_i_table code_array program_table ] */
+    if (!lua_isstring(klua_state, -1)) {
+      lua_pop(klua_state, 3);
+      return -1;
+    }
     const char *op = luaL_checklstring(klua_state, -1, NULL);
     if (strcmp(op, "CPU") == 0) {
       pgm->code[i].op = OP_CPU;
@@ -97,23 +118,32 @@ int klua_parseprogram(lua_State *klua_state, Program *pgm) {
       printf("ERROR: Parsing %s: Unknown block op '%s'\n", pgm->name, op);
       /* TODO: It's not convenient to count how many elements to pop each time i
        * early return when something wrong happens in the parsing.
+       * Can i enforce a schema for the `job` global and let Lua VM checks the
+       * type for me?
        */
       lua_pop(klua_state, 3);
-      return 0;
+      return -1;
     }
 
     lua_pop(klua_state, 1);
 
     /* Get op cost */
     lua_getfield(klua_state, -1, "cost");
+    /* Stack: [ cost block_i_table code_array program_table ] */
+    if (!lua_isnumber(klua_state, -1)) {
+      lua_pop(klua_state, 3);
+      return -1;
+    }
     double cost = luaL_checknumber(klua_state, -1);
     pgm->code[i].cost = cost;
     lua_pop(klua_state, 1);
 
     lua_pop(klua_state, 1);
+    /* Stack: [ code_array program_table ] */
   }
   lua_pop(klua_state, 1);
 
+  /* Stack: [ program_table ] */
   return 0;
 }
 
