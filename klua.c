@@ -189,5 +189,5 @@ int klua_pushprocess(lua_State *klua_state, int pptr) {
 
   lua_setmetatable(klua_state, lua_gettop(klua_state) - 1);
 
-  return 1;
+  return 0;
 }
