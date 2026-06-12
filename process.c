@@ -44,11 +44,12 @@ void advance_block(Process *p) {
   p->ip.offset = 0;
 }
 
-void advance_offset(Process *p, size_t off) {
+void advance_offset(Process *p, double off) {
   /* TODO: Some code block types operations currently doesn't have cost, so
    *       that's dangerous.
    */
-  if (!p || off <= p->ip.offset || off > p->code->cost)
+  const block *b = get_current_block(p);
+  if (!p || !b || off <= p->ip.offset || off > b->cost)
     return;
 
   p->ip.offset = off;

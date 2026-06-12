@@ -6,7 +6,7 @@
 
 typedef struct {
   size_t index;
-  size_t offset;
+  double offset;
 } IP;
 
 /* TODO: Add other attributes when needed e.g. instruction pointer, state,
@@ -25,6 +25,6 @@ const block *get_current_block(const Process *p);
 
 void advance_block(Process *p);
 
-void advance_offset(Process *p, size_t off);
+void advance_offset(Process *p, double off);
 
 #endif
